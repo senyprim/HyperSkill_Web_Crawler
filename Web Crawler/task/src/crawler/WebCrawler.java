@@ -106,6 +106,7 @@ public class WebCrawler extends JFrame {
         if (url==null || url.isEmpty()) return null;
         try {
             URLConnection connection = new URL(url).openConnection();
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:63.0) Gecko/20100101 Firefox/63.0");
             try (InputStream input = connection.getInputStream()) {
                 return new String(input.readAllBytes(), StandardCharsets.UTF_8);
             }catch (Exception exception){
