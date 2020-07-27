@@ -9,6 +9,7 @@ import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -18,9 +19,17 @@ import static javax.swing.GroupLayout.Alignment.LEADING;
 
 public class WebCrawler extends JFrame {
 
-    JLabel titleLabel;
-    private String text;
     private String url;
+    private int workers;
+    private int maxDepth;
+    private boolean maxDepthEnabled;
+    private int timeLimitSec;
+    private boolean timeLimitEnabled;
+    private Duration elapsedTime;
+    private int parsedPages;
+    private String fileName;
+    private String text;
+
     private String title;
 
 
@@ -95,6 +104,7 @@ public class WebCrawler extends JFrame {
         export.setName("ExportUrlTextField");
         exportPanel.add(export,BorderLayout.CENTER);
         JButton save = new JButton("Save");
+        save.setName("ExportButton");
         exportPanel.add(save,BorderLayout.EAST);
         centerPanel.add(exportPanel);
 
