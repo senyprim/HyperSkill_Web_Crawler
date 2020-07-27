@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static javax.swing.GroupLayout.Alignment.LEADING;
+
 public class WebCrawler extends JFrame {
 
     JLabel titleLabel;
@@ -29,53 +31,75 @@ public class WebCrawler extends JFrame {
         setTitle("Web Crawler");
         setBackground(Color.GRAY);
         //Добавляем рабочее пространство с бордером в 5пикселей
-        JPanel workFlow = new JPanel();
+        JPanel workFlow = new JPanel(new BorderLayout());
         workFlow.setBorder(BorderFactory.createEmptyBorder(5,5,5,5));
-        workFlow.setLayout(new BorderLayout());
-        //На верх добавляем панель
-        JPanel topPanel = new JPanel();
-        topPanel.setLayout(new BoxLayout(topPanel,BoxLayout.X_AXIS));
-        topPanel.setBorder(BorderFactory.createEmptyBorder(0,0,5,0));
-        //С текстовым полем
-        JTextField textField = new JTextField();
-        textField.setName("UrlTextField");
-        topPanel.add(textField);
-        //и кнопкой
-        JButton button = new JButton("Get text!");
-        button.setName("RunButton");
-        topPanel.add(button);
-        workFlow.add(topPanel,BorderLayout.NORTH);
-        //В центр добавляем центральную панель и делим ее border layout
-        JPanel centerPanel = new JPanel();
-        centerPanel.setLayout(new BorderLayout());
-        workFlow.add(centerPanel,BorderLayout.CENTER);
-        //В центральную панель  сверху добавляем панель заголовков
-        JPanel titlePanel = new JPanel();
-        titlePanel.setLayout(new FlowLayout(FlowLayout.LEFT));
-        centerPanel.add(titlePanel,BorderLayout.NORTH);
-        //В панель заголовком добавляем метки
-        JLabel header = new JLabel("Title: ");
-        titlePanel.add(header);
-        titleLabel = new JLabel("");
-        titleLabel.setName("TitleLabel");
-        titlePanel.add(titleLabel);
-        //В центральную панель в центр добавляем тваблицу в скрол панеле
-        JTable table = createTable();
-        table.setBackground(Color.WHITE);
-        centerPanel.add(new JScrollPane(table),BorderLayout.CENTER);
-        //В центральную панель снизу добавляем панель экспорта
-        JPanel exportPanel = new JPanel();
-        exportPanel.setLayout(new BorderLayout());
-        JTextField exportField = new JTextField("",20);
-        exportField.setName("ExportUrlTextField");
-        JButton exportButton = new JButton("Save");
-        exportButton.setName("ExportButton");
-        exportPanel.add(new JLabel("Export:"),BorderLayout.WEST);
-        exportPanel.add(exportField,BorderLayout.CENTER);
-        exportPanel.add(exportButton,BorderLayout.EAST);
 
-        centerPanel.add(exportPanel,BorderLayout.SOUTH);
-        add(workFlow);
+        //Левая панель с метками
+        JPanel labelPanel = new JPanel(new GridLayout(7,1,10,10));
+        labelPanel.setBorder(BorderFactory.createEmptyBorder(0,5,0,0));
+        labelPanel.add(new JLabel("Start URL:"));
+        labelPanel.add(new JLabel("Workers:"));
+        labelPanel.add(new JLabel("Maximum depth:"));
+        labelPanel.add(new JLabel("Time limit:"));
+        labelPanel.add(new JLabel("Elapsed time:"));
+        labelPanel.add(new JLabel("Parsed pages:"));
+        labelPanel.add(new JLabel("Export:"));
+        workFlow.add(labelPanel,BorderLayout.WEST);
+        //Центральная панель
+        JPanel centerPanel = new JPanel(new GridLayout(7,1,10,10));
+        //Первая строка
+        JPanel startURLPanel = new JPanel(new BorderLayout());
+        JTextField url=new JTextField();
+        url.setName("UrlTextField");
+        startURLPanel.add(url,BorderLayout.CENTER);
+        JButton run = new JButton("Run");
+        startURLPanel.add(run,BorderLayout.EAST);
+        centerPanel.add(startURLPanel);
+        //Вторая строка
+        JPanel workersPanel = new JPanel(new BorderLayout());
+        JTextField workersCount=new JTextField();
+        workersPanel.add(workersCount,BorderLayout.CENTER);
+        centerPanel.add(workersPanel);
+        //Третья
+        JPanel maxDepthPanel = new JPanel(new BorderLayout());
+        JTextField depth=new JTextField();
+        depth.setName("DepthTextField");
+        maxDepthPanel.add(depth,BorderLayout.CENTER);
+        JCheckBox depthCheckBox = new JCheckBox("Enabled",false);
+        depthCheckBox.setName("DepthCheckBox");
+        maxDepthPanel.add(depthCheckBox,BorderLayout.EAST);
+        centerPanel.add(maxDepthPanel);
+        //4
+        JPanel timeLimitPanel = new JPanel(new BorderLayout());
+        JTextField time =new JTextField();
+        timeLimitPanel.add(time,BorderLayout.CENTER);
+        JCheckBox timeLimitCheckBox = new JCheckBox("Enabled",true);
+        JPanel panel = new JPanel();
+        panel.add(new JLabel("second"));
+        panel.add(timeLimitCheckBox);
+        timeLimitPanel.add(panel,BorderLayout.EAST);
+        centerPanel.add(timeLimitPanel);
+        //5
+        JPanel elapsedTimePanel = new JPanel(new BorderLayout());
+        JLabel elapsedTime = new JLabel("0:00");
+        elapsedTimePanel.add(elapsedTime,BorderLayout.WEST);
+        centerPanel.add(elapsedTimePanel);
+        //6
+        JPanel parsedPagesPanel = new JPanel(new BorderLayout());
+        JLabel parsedPages = new JLabel("0");
+        parsedPagesPanel.add(parsedPages,BorderLayout.WEST);
+        centerPanel.add(parsedPagesPanel);
+        //7
+        JPanel exportPanel = new JPanel(new BorderLayout());
+        JTextField export=new JTextField();
+        export.setName("ExportUrlTextField");
+        exportPanel.add(export,BorderLayout.CENTER);
+        JButton save = new JButton("Save");
+        exportPanel.add(save,BorderLayout.EAST);
+        centerPanel.add(exportPanel);
+
+        workFlow.add(centerPanel,BorderLayout.CENTER);
+/*
         button.addActionListener( event->{
             this.url=textField.getText();
             this.text=loadUrl(this.url);
@@ -90,6 +114,9 @@ public class WebCrawler extends JFrame {
                 exception.printStackTrace();
             }
         });
+
+         */
+        add(workFlow);
         setVisible(true);
     }
 
