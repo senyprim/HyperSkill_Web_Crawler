@@ -10,28 +10,74 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.ArrayList;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static javax.swing.GroupLayout.Alignment.LEADING;
-
 public class WebCrawler extends JFrame {
+    private class Url{
+        final String pageUrl;
+        final String href;
+        String title;
+        final int depth;
+        Url(String pageUrl,String href,int depth){
+            this.pageUrl = pageUrl;
+            this.href=getAbsoluteUrl(href,pageUrl);
+            this.depth=depth;
+        }
+        private String getAbsoluteUrl(String href,String pageUrl)
+        {
+            if (href==null || href.isEmpty()) return null;
+            boolean isAbsoluteUrl = href.contains("/");
+            //Убираем ведущие и конечные слеши
+            href=(href.replace("/"," ")).trim().replace(" ","/");
+
+            boolean protocolExist = Pattern.matches("http[s]?://.*",href);
+
+            if (!isAbsoluteUrl){
+                if (pageUrl==null || pageUrl.isEmpty()) return null;
+                String[] paths = href.split("//");
+                if (paths.length<2) {
+                    href+=".html";
+                }
+                paths=pageUrl.split("/");
+                paths[paths.length-1]="";
+                href=String.join("/",paths)+href;
+
+            } else if (!protocolExist){
+                if (pageUrl==null || pageUrl.isEmpty()) return null;
+                href=pageUrl.substring(0,pageUrl.indexOf("://")+3)+href;
+            }
+            return href;
+        }
+    }
 
     private String url;
     private int workers;
     private int maxDepth;
     private boolean maxDepthEnabled;
-    private int timeLimitSec;
+    private Long timeLimitSec;
     private boolean timeLimitEnabled;
-    private Duration elapsedTime;
-    private int parsedPages;
+    private Long startTimeMills;
+    private Long elapsedTimeMills;
+    private AtomicInteger countParsedPages=new AtomicInteger(0);
     private String fileName;
-    private String text;
 
+    private String text;
     private String title;
 
+    private ConcurrentLinkedQueue<Url> queue = new ConcurrentLinkedQueue<>();
+    private ConcurrentHashMap<String,String> links = new ConcurrentHashMap<>();
+    private Thread[] threads;
+
+    JLabel parsedPages;
+    JLabel elapsedTimeLabel;
 
     public WebCrawler() {
         super();
@@ -61,7 +107,8 @@ public class WebCrawler extends JFrame {
         JTextField url=new JTextField();
         url.setName("UrlTextField");
         startURLPanel.add(url,BorderLayout.CENTER);
-        JButton run = new JButton("Run");
+        JToggleButton run = new JToggleButton("Run",false);
+        run.setName("RunButton");
         startURLPanel.add(run,BorderLayout.EAST);
         centerPanel.add(startURLPanel);
         //Вторая строка
@@ -90,12 +137,13 @@ public class WebCrawler extends JFrame {
         centerPanel.add(timeLimitPanel);
         //5
         JPanel elapsedTimePanel = new JPanel(new BorderLayout());
-        JLabel elapsedTime = new JLabel("0:00");
-        elapsedTimePanel.add(elapsedTime,BorderLayout.WEST);
+        elapsedTimeLabel = new JLabel("0:00");
+        elapsedTimePanel.add(elapsedTimeLabel,BorderLayout.WEST);
         centerPanel.add(elapsedTimePanel);
         //6
         JPanel parsedPagesPanel = new JPanel(new BorderLayout());
-        JLabel parsedPages = new JLabel("0");
+        parsedPages = new JLabel("0");
+        parsedPages.setName("ParsedLabel");
         parsedPagesPanel.add(parsedPages,BorderLayout.WEST);
         centerPanel.add(parsedPagesPanel);
         //7
@@ -109,27 +157,22 @@ public class WebCrawler extends JFrame {
         centerPanel.add(exportPanel);
 
         workFlow.add(centerPanel,BorderLayout.CENTER);
-/*
-        button.addActionListener( event->{
-            this.url=textField.getText();
-            this.text=loadUrl(this.url);
-            this.title =getTitle(text);
-            titleLabel.setText(title);
-            updateTableData(table,getLinks(text,url, title));
-        });
-        exportButton.addActionListener(actionEvent -> {
-            try {
-                saveTable(exportField.getText(),getDataFromTable(table));
-            } catch (IOException exception) {
-                exception.printStackTrace();
-            }
-        });
 
-         */
+        run.addActionListener((event)->{
+            run.setSelected(true);
+            run(url.getText()
+                    ,workersCount.getText().isEmpty()?1:Integer.parseInt(workersCount.getText())
+                    ,depth.getText().isEmpty()?Integer.MAX_VALUE:Integer.parseInt(depth.getText())
+                    ,/*timeLimitCheckBox.isSelected()?Integer.parseInt(time.getText()):*/Integer.MAX_VALUE
+                    ,this.queue
+                    ,this.links
+            );
+            run.setSelected(false);
+        });
         add(workFlow);
         setVisible(true);
     }
-
+//Выбрать заголовок страницы
     private static String getTitle(String text) {
         if (text==null || text.isEmpty()) return null;
         Matcher matcher = Pattern.compile("<title>([^<]*)"
@@ -139,84 +182,100 @@ public class WebCrawler extends JFrame {
         return null;
     }
 
-    private static String loadUrl(String url) {
+    private static String loadUntilTitle(String url){
         if (url==null || url.isEmpty()) return null;
         try {
             URLConnection connection = new URL(url).openConnection();
             connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:63.0) Gecko/20100101 Firefox/63.0");
-            try (InputStream input = connection.getInputStream()) {
-                return new String(input.readAllBytes(), StandardCharsets.UTF_8);
-            }catch (Exception exception){
-                return null;
+            StringBuilder stb = new StringBuilder();
+            String line;
+            try(BufferedReader input = new BufferedReader(new InputStreamReader(connection.getInputStream()))){
+                while ((line=input.readLine())!=null){
+                    String title = getTitle(line);
+                    if (title!=null) return title;
+                    stb.append(line);
+                }
             }
+            return getTitle(stb.toString());
         }
-        catch (IOException exception){
+        catch (Exception exception){
             return null;
         }
     }
-
-    private JTable createTable(){
-        String[] title = {"URL","Title"};
-        DefaultTableModel tableModel = new DefaultTableModel();
-        tableModel.setColumnIdentifiers(title);
-        JTable jTable = new JTable(tableModel);
-        jTable.setName("TitlesTable");
-        jTable.setEnabled(false);
-        return jTable;
-    }
-    private  void updateTableData(JTable table,String[][] data){
-        DefaultTableModel tableModel = (DefaultTableModel)table.getModel();
-        tableModel.setRowCount(0);
-
-        for (String[] line :data){
-            tableModel.addRow(line);
+//Получить содержание страницы
+    private static String getPage(String url) {
+        if (url==null || url.isEmpty()) return null;
+        try {
+            URLConnection connection = new URL(url).openConnection();
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:63.0) Gecko/20100101 Firefox/63.0");
+            InputStream input = new BufferedInputStream(connection.getInputStream());
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         }
-        tableModel.fireTableDataChanged();
+        catch (Exception exception){
+            return null;
+        }
     }
-
-    private static String[][] getLinks(String text,String url,String title) {
-        if (text==null || text.isEmpty()) return new String[0][0];
-        Matcher matcher = Pattern.compile("<\\s*a[^>]*href\\s*=\\s*['\"]+([^'\" >]+)['\"][^>]*>(.*)<\\s*/a\\s*>"
+//Получить ссылки на странице
+    private static String[] getLinks(String text) {
+        if (text==null || text.isEmpty()) return null;
+        Matcher matcher = Pattern.compile("<\\s*a[^>]*href\\s*=\\s*['\"]+([^'\" >]+)['\"]"
                 ,Pattern.CASE_INSENSITIVE|Pattern.MULTILINE).matcher(text);
-        List<String[]> result = new ArrayList<>();
-        result.add(new String[]{url,title});
+        List<String> links = new ArrayList<>();
         while (matcher.find()){
-            String absoluteLink = getAbsoluteUrl(matcher.group(1),url);
-            title = getTitle(loadUrl(absoluteLink));
-            if (title==null || title.isEmpty()) continue;
-            result.add(new String[]{absoluteLink,title});
+            links.add(matcher.group(1));
         }
-        return result.toArray(String[][]::new);
+        return links.toArray(String[]::new);
     }
+//Сохранить массив
+    private static void saveTable(String filename,Map<String,String> data) throws IOException {
+        String[] array = data.entrySet().stream().map(item->String.format("%s\n%s",item.getKey(),item.getValue())).toArray(String[]::new);
+        Files.writeString(Paths.get(filename),String.join("\n",array),StandardCharsets.UTF_8);
+    }
+//
+    private void thread(ConcurrentLinkedQueue<Url> queue, ConcurrentHashMap<String,String> result,int maxDepth,long maxTime){
+        while (queue.size()>0){
+            if (System.currentTimeMillis()>maxTime) break;
 
-    private static String getAbsoluteUrl(String url,String root)
-    {
-        if (url==null || url.isEmpty() || root==null || root.isEmpty()) return null;
-        boolean isAbsoluteUrl = url.contains("/");
-        //Убираем ведущие и конечные слеши
-        url=(url.replace("/"," ")).trim().replace(" ","/");
-        boolean protocolExist = Pattern.matches("http[s]?://.*",url);
-
-        if (!isAbsoluteUrl){
-            String[] paths=root.split("/");
-            paths[paths.length-1]="";
-            url=String.join("/",paths)+url;
-        } else if (!protocolExist){
-            url=root.substring(0,root.indexOf("://")+3)+url;
-        }
-        return url;
-    }
-    private static void saveTable(String filename,String[] data) throws IOException {
-        Files.writeString(Paths.get(filename),String.join("\n",data),StandardCharsets.UTF_8);
-    }
-    private static String[] getDataFromTable(JTable table){
-        List<String> result = new ArrayList<>();
-        DefaultTableModel model =(DefaultTableModel)table.getModel();
-        for(int row = 0; row<model.getRowCount();row++){
-            for (int col =0;col<model.getColumnCount();col++){
-                result.add((String) model.getValueAt(row,col));
+            Url url = queue.poll();
+            if (url==null || url.href.isEmpty() || result.containsKey(url.href) ||url.depth>maxDepth) continue;
+            String page=getPage(url.href);
+            if (page==null) continue;
+            title=getTitle(page);
+            if (url.depth<maxDepth){
+                String[] links = getLinks(page);
+                for (String link : links){
+                    queue.add(new Url(url.href,link,url.depth+1));
+                }
             }
+            countParsedPages.getAndIncrement();
+            showParsedPages();
+            result.put(url.href,title);
+            System.out.println(url.href+"-"+title);
         }
-        return result.toArray(String[]::new);
+    }
+//Обновить поля в форме
+    private void showParsedPages(){
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                parsedPages.setText(String.format("%d",countParsedPages.get()));
+                elapsedTimeLabel.setText(String.format("%d:%d"
+                        ,TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis()- startTimeMills)
+                        ,TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis()- startTimeMills)%60
+                ));
+            }
+        });
+    }
+    private void run(String startPage,int threadsCount,int maxDepth,long maxTimeDuration
+            ,ConcurrentLinkedQueue<Url> queue, ConcurrentHashMap<String,String> result){
+        queue.clear();
+        result.clear();
+        countParsedPages.set(0);
+        queue.add(new Url(null,startPage,0));
+        this.startTimeMills = System.currentTimeMillis();
+
+        for(int i=0;i<threadsCount;i++){
+            new Thread(()->thread(queue,result,maxDepth,System.currentTimeMillis()+maxTimeDuration)).start();
+        }
     }
 }
