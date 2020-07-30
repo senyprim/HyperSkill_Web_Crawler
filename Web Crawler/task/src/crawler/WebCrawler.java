@@ -43,9 +43,9 @@ public class WebCrawler extends JFrame {
             if (!isAbsoluteUrl){
                 if (pageUrl==null || pageUrl.isEmpty()) return null;
                 String[] paths = href.split("//");
-                if (paths.length<2) {
-                    href+=".html";
-                }
+//                if (paths.length<2) {
+//                    href+=".html";
+//                }
                 paths=pageUrl.split("/");
                 paths[paths.length-1]="";
                 href=String.join("/",paths)+href;
@@ -169,6 +169,13 @@ public class WebCrawler extends JFrame {
             );
             run.setSelected(false);
         });
+        save.addActionListener((event)-> {
+            try {
+                saveTable(export.getText(),links);
+            } catch (IOException exception) {
+                exception.printStackTrace();
+            }
+        });
         add(workFlow);
         setVisible(true);
     }
@@ -250,7 +257,7 @@ public class WebCrawler extends JFrame {
             countParsedPages.getAndIncrement();
             showParsedPages();
             result.put(url.href,title);
-            System.out.println(url.href+"-"+title);
+
         }
     }
 //Обновить поля в форме
